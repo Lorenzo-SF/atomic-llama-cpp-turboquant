@@ -949,6 +949,14 @@ struct llm_graph_qkv {
     ggml_tensor * v; // [n_embd_head, n_head_kv, n_tokens]
 };
 
+// rescale `cur` (the src1 of a matmul) by a power of two, computed from its maximum absolute
+// (upstream #26223; reintroducido en este fork solo para el camino de FLINT, que
+//  necesita el headroom que el guard L2 propio del fork no da en CUDA)
+struct llm_graph_amax_src1 {
+    ggml_tensor * res;     // cur rescaled
+    ggml_tensor * scale_s; // scale to undo on the matmul result, or nullptr
+};
+
 struct llm_graph_context {
     const llm_arch arch;
 
@@ -1023,6 +1031,11 @@ struct llm_graph_context {
               ggml_tensor * cur,
               ggml_tensor * w_s = nullptr,
             enum ggml_prec   prec = GGML_PREC_DEFAULT) const;
+
+    // rescale `cur` (the src1 of a matmul) by a power of two, computed from its maximum absolute
+    // keep both individual values and Q8 activation block sums within F16 range
+    llm_graph_amax_src1 build_amax_src1_f16(
+              ggml_tensor * cur) const;
 
     // do mat_mul_id, while optionally apply lora and per-expert scale
     ggml_tensor * build_lora_mm_id(

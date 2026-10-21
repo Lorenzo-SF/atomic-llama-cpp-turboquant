@@ -20,6 +20,7 @@ TEXT_MODEL_MAP: dict[str, str] = {
     "FishOmniBackboneForCausalLM": "fish_omni",
     "AfmoeForCausalLM": "afmoe",
     "LagunaForCausalLM": "laguna",
+    "FlintForCausalLM": "flint",
     "ApertusForCausalLM": "llama",
     "ArceeForCausalLM": "llama",
     "ArcticForCausalLM": "arctic",

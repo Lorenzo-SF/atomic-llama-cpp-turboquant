@@ -1568,6 +1568,43 @@ ggml_tensor * llm_graph_context::build_lora_mm(
     return res;
 }
 
+llm_graph_amax_src1 llm_graph_context::build_amax_src1_f16(
+          ggml_tensor * cur) const {
+    llm_graph_amax_src1 result = {
+        /*.res     =*/ cur,
+        /*.scale_s =*/ nullptr,
+    };
+
+    const int64_t n_embd = cur->ne[0];
+
+    // amax = max|cur| along the rows for each [expert, token] -> [1, n_expert, n_tokens]
+    ggml_tensor * ab = ggml_abs(ctx0, cur);
+    ggml_tensor * amax = ggml_pool_1d(ctx0, ab, GGML_OP_POOL_MAX, n_embd, n_embd, 0);
+
+    // ref: https://github.com/ggml-org/llama.cpp/pull/26223
+    constexpr float k_log2_e = 1.4426950408889634f; // 1 / ln(2)
+    constexpr float k_ln_2   = 0.6931471805599453f;
+
+    ggml_tensor * e;
+    // note: this can technically be:
+    // e = ggml_scale(ctx0, amax, 1.0f/32768.0f);
+    // but we leave x32 headroom for the F16 sums of 32 values in Q8 activation blocks
+    e = ggml_scale(ctx0, amax, 1.0f/1024.0f);
+    e = ggml_log  (ctx0, e);
+    e = ggml_scale(ctx0, e, k_log2_e);
+    e = ggml_ceil (ctx0, e);
+    e = ggml_clamp(ctx0, e, 0.0f, 127.0f);
+    e = ggml_scale(ctx0, e, k_ln_2);
+    e = ggml_exp  (ctx0, e);
+
+    result = {
+        /*.res     =*/ ggml_div(ctx0, cur, e),
+        /*.scale_s =*/ e,
+    };
+
+    return result;
+}
+
 ggml_tensor * llm_graph_context::build_lora_mm_id(
           ggml_tensor * w,   // ggml_tensor * as
           ggml_tensor * cur, // ggml_tensor * b
@@ -2318,10 +2355,22 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
             GGML_ABORT("fatal error");
     }
 
-    // Direct path by default (CUDA-first). Metal-only L2 rescale when needed
-    // (see llm_sched_needs_moe_f16_act_guard). Mathematically identity on Metal;
-    // keeps f16 MUL_MAT_ID acts under 65504.
-    if (llm_sched_needs_moe_f16_act_guard(sched)) {
+    // FLINT (upstream #30928): su src1 del MoE puede desbordar f16 y upstream lo
+    // resuelve con el amax (build_amax_src1_f16). Este fork sustituyo ese mecanismo
+    // por el guard L2 de abajo (que solo actua en Metal, porque en CUDA el camino
+    // directo es mas rapido), asi que para FLINT se mantiene la via de upstream:
+    // el reescalado solo afecta a la proyeccion "down" (la "up" consume el
+    // resultado de la down, ya desescalado) y se deshace con scale_s.
+    if (arch == LLM_ARCH_FLINT) {
+        llm_graph_amax_src1 amax_src1 = build_amax_src1_f16(cur);
+        cur = amax_src1.res;
+
+        experts = build_lora_mm_id(down_exps, cur, selected_experts, down_exps_s); // [n_embd, n_expert_used, n_tokens]
+
+        if (amax_src1.scale_s) {
+            experts = ggml_mul(ctx0, experts, amax_src1.scale_s);
+        }
+    } else if (llm_sched_needs_moe_f16_act_guard(sched)) {
         const float f16_safe = 32768.0f; // stay well under the f16 max of 65504
         ggml_tensor * col_l2 = ggml_sqrt(ctx0, ggml_sum_rows(ctx0, ggml_sqr(ctx0, cur))); // [1, n_expert_used, n_tokens]
         col_l2 = ggml_clamp(ctx0, col_l2, 1e-8f, 1e30f); // guard empty columns against div-by-zero
