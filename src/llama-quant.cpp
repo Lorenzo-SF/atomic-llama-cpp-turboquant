@@ -536,6 +536,30 @@ static ggml_type llama_tensor_get_type_impl(quantize_state_impl & qs, ggml_type 
         } else {
             new_type = GGML_TYPE_Q8_0;
         }
+    } else if (ftype == LLAMA_FTYPE_MOSTLY_NVFP4) {
+        // MoE   tensors -> NVFP4
+        // other tensors -> Q8_0
+        //
+        // ESTA REGLA HACE FALTA, Y ES LA HERMANA DE LA DEL MXFP4_MOE (que
+        // si existe y si funciona: "MoE tensors (ne[2] > 1) -> MXFP4; otros
+        // -> Q8_0"). Sin ella, el NVFP4 de llama.cpp cuantiza a 4 bits TODO
+        // lo que tenga 2 o mas dimensiones: la atencion, las proyecciones
+        // del Mamba (ssm_in/ssm_out) y el embedding. El resultado es un
+        // modelo que "habla cosas raras": el estado recurrente del Mamba se
+        // desincroniza y el embedding pierde precision.
+        //
+        // Medido en el NVFP4 fabricado SIN esta regla: 163 tensores a 4
+        // bits (46 expertos + 117 mas) y solo 1 en q8_0. Con la regla, los
+        // expertos van a NVFP4 y el resto a Q8_0, como en el MXFP4_MOE.
+        //
+        // (NVIDIA, con modelopt, deja el resto en F16: su GGUF tiene 93
+        // NVFP4, 71 F16 y 330 F32. Q8_0 es mas compacto y es lo que ya
+        // funciona en el MXFP4_MOE de este mismo motor.)
+        if (tensor->ne[2] > 1) {
+            new_type = GGML_TYPE_NVFP4;
+        } else {
+            new_type = GGML_TYPE_Q8_0;
+        }
     } else if (category == tensor_category::TOKEN_EMBD) {
         if (qs.params->token_embedding_type < GGML_TYPE_COUNT) {
             new_type = qs.params->token_embedding_type;
