@@ -17,6 +17,7 @@ __all__ = [
 
 
 TEXT_MODEL_MAP: dict[str, str] = {
+    "FishOmniBackboneForCausalLM": "fish_omni",
     "AfmoeForCausalLM": "afmoe",
     "LagunaForCausalLM": "laguna",
     "ApertusForCausalLM": "llama",
@@ -242,6 +243,7 @@ TEXT_MODEL_MAP: dict[str, str] = {
     "SeedOssForCausalLM": "olmo",
     "SmallThinkerForCausalLM": "smallthinker",
     "SmolLM3ForCausalLM": "llama",
+    "Spark2_5ForCausalLM": "spark2_5",
     "SolarOpenForCausalLM": "glm",
     "StableLMEpochForCausalLM": "stablelm",
     "StableLmForCausalLM": "stablelm",
