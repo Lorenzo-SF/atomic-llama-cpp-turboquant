@@ -214,6 +214,7 @@ class Keys:
         VALUE_LENGTH_SWA             = "{arch}.attention.value_length_swa"
         SHARED_KV_LAYERS             = "{arch}.attention.shared_kv_layers"
         SLIDING_WINDOW_PATTERN       = "{arch}.attention.sliding_window_pattern"
+        ROPE_PATTERN                 = "{arch}.attention.rope_pattern"
         TEMPERATURE_SCALE            = "{arch}.attention.temperature_scale"
 
         class Indexer:

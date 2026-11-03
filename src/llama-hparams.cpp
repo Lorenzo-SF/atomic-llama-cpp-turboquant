@@ -82,12 +82,30 @@ uint32_t llama_hparams::n_gqa(uint32_t il) const {
     return n_head/n_head_kv;
 }
 
+uint32_t llama_hparams::n_ff_exp_layer(uint32_t il) const {
+    // si hay patron por capa y esa capa lo tiene, ese manda; si no, el
+    // escalar (que es lo que cargan los demas MoE).
+    if (il < n_layer_all && n_ff_exp_arr[il] > 0) {
+        return n_ff_exp_arr[il];
+    }
+
+    return n_ff_exp;
+}
+
 uint32_t llama_hparams::n_rot(uint32_t il) const {
     if (il < n_layer_all) {
         return is_swa(il) ? n_rot_swa : n_rot_full;
     }
 
     GGML_ABORT("fatal error");
+}
+
+bool llama_hparams::has_rope(uint32_t il) const {
+    if (il < n_layer_all) {
+        return rope_pattern[il] != 0;
+    }
+
+    GGML_ABORT("%s: il (%u) out of bounds (n_layer_all: %u)\n", __func__, il, n_layer_all);
 }
 
 uint32_t llama_hparams::n_embd_inp() const {

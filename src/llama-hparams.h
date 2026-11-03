@@ -97,6 +97,19 @@ struct llama_hparams {
     std::array<uint32_t, LLAMA_MAX_LAYERS> n_head_kv_arr;
     std::array<uint32_t, LLAMA_MAX_LAYERS> n_ff_arr;
 
+    // per-layer expert feed-forward size (flint: el tamano del expert
+    // puede cambiar de capa a capa)
+    std::array<uint32_t, LLAMA_MAX_LAYERS> n_ff_exp_arr;
+
+    // tamano del FF de los expertos de la capa il: el de esa capa si hay
+    // patron por capa (n_ff_exp_arr), si no, el escalar (n_ff_exp).
+    uint32_t n_ff_exp_layer(uint32_t il = 0) const;
+
+    // patron de RoPE por capa (1 = esa capa usa RoPE, 0 = NoPE).
+    // Por defecto TODAS las capas usan RoPE; lo sobreescribe el GGUF
+    // ("<arch>.attention.rope_pattern").
+    std::array<uint32_t, LLAMA_MAX_LAYERS> rope_pattern;
+
     uint32_t n_layer_dense_lead = 0;
     uint32_t n_lora_q           = 0;
     uint32_t n_lora_kv          = 0;
@@ -373,6 +386,10 @@ struct llama_hparams {
     uint32_t n_gqa(uint32_t il = 0) const;
 
     uint32_t n_rot(uint32_t il = 0) const;
+
+    // ¿esta capa usa RoPE? (0 = NoPE). El K-shift solo se aplica si alguna
+    // capa lo usa: una capa NoPE no se puede desplazar.
+    bool has_rope(uint32_t il) const;
 
     // dimension of main + auxiliary input embeddings
     uint32_t n_embd_inp() const;
